@@ -1,20 +1,44 @@
 class Jank < Formula
   desc "The native Clojure dialect hosted on LLVM with seamless C++ interop."
   homepage "https://jank-lang.org"
-  url "https://cache.jank-lang.org/jank_0.1-1_aarch64.tar.gz"
+  url "https://github.com/jank-lang/jank.git", branch: "main"
   version "0.1"
   license "MPL-2.0"
 
+  depends_on "cmake" => :build
+  depends_on "git-lfs" => :build
+  depends_on "ninja" => :build
+
   depends_on "boost"
   depends_on "libzip"
+  depends_on "llvm@22"
   depends_on "openssl"
 
   skip_clean "bin/jank"
 
   def install
-    (buildpath/"usr/local").cd do
-      cp_r Dir["*"], prefix
+    ENV.prepend_path "PATH", Formula["llvm@22"].opt_bin
+
+    ENV.append "LDFLAGS", "-Wl,-rpath,#{Formula["llvm@22"].opt_lib}"
+
+    ENV.append "CPPFLAGS", "-L#{Formula["llvm@22"].opt_include}"
+    ENV.append "CPPFLAGS", "-fno-sized-deallocation"
+
+    if OS.mac?
+      ENV["SDKROOT"] = MacOS.sdk_path
+    else
+      ENV["CC"] = Formula["llvm@22"].opt_bin/"clang"
+      ENV["CXX"] = Formula["llvm@22"].opt_bin/"clang++"
     end
+
+    cd "compiler+runtime"
+
+    system "./bin/configure",
+           "-GNinja",
+           *std_cmake_args,
+           "-DHOMEBREW_ALLOW_FETCHCONTENT=ON"
+    system "./bin/compile"
+    system "./bin/install"
   end
 
   test do
